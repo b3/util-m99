@@ -80,13 +80,14 @@ _file () { sed -nr '/^# begin '"$1"' *$/,/^# end '"$1"'$/ p' "$0" | sed '1d ; $d
 #   ansi     true*|false    contrôle le positionnement (curseur, affichage)
 #   pause    entier (0*)    nombre de secondes d'attentes entre chaque cycle
 # 
-# Les valeurs par défaut sont suffixées par *.
+# En mode batch tous les paramètres sont à false. Les valeurs par défaut en
+# mode interactif sont suffixées par *.
 #
 # En absence de paramètres les valeurs courantes sont affichés.
 config ()
 {
-    $ansi && _ansi "\e[2J\e[;H"
     if test $# -eq 0 ; then
+        $ansi && _ansi "\e[2J\e[;H"
         echo debug=$debug
         echo view=$view
         echo ansi=$ansi
@@ -229,20 +230,8 @@ repl ()
 # Initialiser la machine (processeur et mémoire).
 init ()
 {
-    for i in $(seq 0 99)
-    do
-        memoire[$i]="   "
-    done
     memoire[99]="I/O"
 
-    reset
-}
-
-##############################################################################
-
-# Réinitialiser le processeur.
-reset ()
-{
     cycle=0
     registres[R]=
     registres[A]=
@@ -487,13 +476,14 @@ _JEQ ()
 
 _JNE ()
 {
-    test ${registres[R]} -ne 0 && registres[PC]=$((${registres[PC]} + 2))
+    test ${registres[R]} -ne $1 && registres[PC]=$((${registres[PC]} + 2))
 }
 
 ##############################################################################
 
 declare -A registres
 commandes=$(declare -F | cut -d ' ' -f 3 | grep -v -E '^_' | sort)
+ansi=false
 ready=false
 
 if test $# -eq 0 ; then         # mode interactif
@@ -543,7 +533,7 @@ Il y a 4 registres :
 
 Au démarrage de la machine l'unité de commande met 00 dans `PC`.
 
-Elle répète le cycle Fetch/Decode/Execute tant que `PC` ne contient pas 99 :
+Elle répète le cycle fetch-decode-execute tant que `PC` ne contient pas 99 :
 
 1. **fetch**
     - copie le contenu de la case adressée par `PC` dans `IR`,
