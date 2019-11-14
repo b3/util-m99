@@ -1,0 +1,6 @@
+# Un simple exemple de calcul avec saisie et affichage
+199 # on demande le premier nombre
+299 # on demande le second nombre
+400 # on les additionne
+099 # on affiche le résultat
+599 # on s'arrête

@@ -1,0 +1,572 @@
+#!/bin/bash
+# Un moteur pour la machine M99
+#
+# usage: m99 [ACTION...]
+#
+# Sans paramètre le moteur est démarré en mode interactif.
+#
+# La documentation de chaque action est accessible en passant son nom à la
+# commande help. doc affiche le fonctionnement de la machine M99.
+#
+
+##############################################################################
+
+# Afficher les crédits et autres aspects légaux.
+credits ()
+{
+    $ansi && _ansi "\e[2J\e[;H"
+    cat <<EOF
+
+La machine [M99], le processeur débranché, a été pensée et mise au point par
+Martin QUINSON et Philippe MARQUET dans le cadre du projet [InfoSansOrdi].
+
+[M99]: https://github.com/InfoSansOrdi/M999
+[InfoSansOrdi]: https://github.com/InfoSansOrdi/InfoSansOrdi
+
+Bruno BEAUFILS a rebranché le processeur via ce simulateur écrit en bash et
+distribué sous les termes de la licence WTFPL-2.
+
+------------------------------------------------------------------------------
+
+              DO WHAT THE FUCK YOU WANT TO PUBLIC LICENSE
+                        Version 2, December 2004
+
+ Copyright (C) 2004 Sam Hocevar <sam@hocevar.net>
+
+ Everyone is permitted to copy and distribute verbatim or modified
+ copies of this license document, and changing it is allowed as long
+ as the name is changed.
+
+              DO WHAT THE FUCK YOU WANT TO PUBLIC LICENSE
+    TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
+
+ 0. You just DO WHAT THE FUCK YOU WANT TO.
+
+------------------------------------------------------------------------------
+
+EOF
+}
+
+##############################################################################
+
+_warn () { w="${0##*/}: attention: $*" ; echo $w 1>&2 ; $ansi && lastw="$lastw$w\n" ; }
+_dbg () { $debug && echo "${0##*/}: debug: $*" 1>&2 ; }
+_isnum () { test "$1" && test "$1" -eq "$1" 2>/dev/null ; }
+_read () { read -e "$@" ; }
+
+_eval () { grep -q "$1" <<< "$commandes exit" && "$@" ; }
+_ansi () { printf "$*" ; }
+_file () { sed -nr '/^# begin '"$1"' *$/,/^# end '"$1"'$/ p' "$0" | sed '1d ; $d' ; }
+
+# Essai de contournement de l'absence de complétion par readline dans read
+#
+# set -o emacs;
+# _tab() {
+#     READLINE_LINE=$(compgen -W "$commandes" $READLINE_LINE)
+#     READLINE_POINT="${#READLINE_LINE}"
+# }
+# bind -x '"\t":"_tab"'
+# complete -W "$commandes" -E
+
+##############################################################################
+
+# Paramétrer le fonctionnement du moteur.
+# args: [PARAM=VALUE]...
+# 
+#   PARAM    VALUE          DESCRIPTION
+#   -----    -----          -----------
+#   debug    true|false*    (dés)active les affichages de déboggage
+#   view     true*|false    affiche la machine après chaque changement
+#   ansi     true*|false    contrôle le positionnement (curseur, affichage)
+#   pause    entier (0*)    nombre de secondes d'attentes entre chaque cycle
+# 
+# Les valeurs par défaut sont suffixées par *.
+#
+# En absence de paramètres les valeurs courantes sont affichés.
+config ()
+{
+    $ansi && _ansi "\e[2J\e[;H"
+    if test $# -eq 0 ; then
+        echo debug=$debug
+        echo view=$view
+        echo ansi=$ansi
+        echo pause=$pause
+    fi
+    for arg in "$@"
+    do
+        IFS="=" read p v <<< "$arg"
+        case "$p" in
+            debug)
+                $v && PS4="+ DEBUG " && set -x 
+                $v || set +x
+                debug=$v
+                ;;
+            view) view=$v ;;
+            ansi) ansi=$v ;;
+            pause)
+                if _isnum $v ; then
+                    pause=$v
+                else
+                    _warn "pas un entier: $arg"
+                fi
+                ;;
+            *) _warn "paramètre inconnu non pris en compte: $arg" ;;
+        esac
+    done
+}
+
+##############################################################################
+
+# Afficher la documentation du script ou d'une de ses commandes.
+# args: [commande]
+help ()
+{
+    $ansi && _ansi "\e[2J\e[;H"
+    tabs 12
+    if test -z "$1" ; then
+        sed -n '2,/^$/ { s/^ *#// ; s/^ //g ; t e ; d ; :e p }' <$0 ;
+        printf 'Les actions disponibles sont :\n\n'
+        for cmd in $commandes
+        do
+            <$0 sed -r -n \
+             -e '/^ *$/ h' \
+             -e '/^ *# / { s/^ *# // ; H }' \
+             -e '/^'"$cmd"' ()/ { g ; s/^\n/  '"$cmd\t"'/ ; s/\n.*// ; p ; q }'
+        done            
+    else
+        <$0 sed -r -n \
+         -e '/^ *$/ h' \
+         -e '/^ *#/ { s/^ *# // ; s/(args:.*)$/\1\n/ ; H }' \
+         -e '/^'"$1"' ()/ { g ; s/^\n/\n'"$1"' - / ; s/args:/\nusage: '"$1"'/ ; s/\n/\n  /g ; p ; q }'
+    fi
+    echo
+}
+
+##############################################################################
+
+# Afficher la documentation de la machine M99.
+doc ()
+{
+    $ansi && _ansi "\e[2J\e[;H"
+    _file m99.md
+}
+
+##############################################################################
+
+# Afficher l'état de la machine.
+show ()
+{
+    tabs 4
+    $ansi && _ansi "\e[2J\e[;H"
+
+    printf "Mémoire\n\n"
+
+    printf "\t"
+    for x in $(seq 0 10 90)
+    do
+        printf "$x\t"
+    done
+    printf "\n"
+
+    for y in $(seq 0 9)
+    do
+        printf "$y\t"
+        for x in $(seq 0 10 90)
+        do
+            printf "%s\t" ${memoire[$((x + y))]}
+        done
+        printf "\n"
+    done
+
+    printf "\nProcesseur\t(t=$cycle)\n\n"
+
+    printf "\tPC\t%s\n" ${registres[PC]}
+    printf "\tIR\t%s" ${registres[IR]}
+    $ansi && test "$(echo $INSTRUCTION | cut -c -3)" = ILL && _ansi "\e[1;31m"
+    printf "\t\t%s\n" "$INSTRUCTION"
+    $ansi && _ansi "\e[0m"
+    printf "\tR\t%s\n" ${registres[R]}
+    printf "\tA\t%s\n" ${registres[A]}
+    printf "\tB\t%s\n" ${registres[B]}
+
+    printf "\nTerminal\n\n"
+    printf "\tSortie : $sortie\n\n"
+
+    $ansi && test "$lastw" && printf "$lastw\n" && lastw=
+}
+
+##############################################################################
+
+# Afficher les instructions exécutées.
+strace ()
+{
+    $ansi && _ansi "\e[2J\e[;H"
+    printf "$traces"
+}
+
+##############################################################################
+
+# Demander les actions à effectuer en boucle.
+# Une action vide équivaut à la dernière action demandée.
+# Si la lecture est impossible ou si donne le mot exit la boucle est terminée.
+repl ()
+{
+    while _read -p "> " commande
+    do
+        if test -z "$commande" ; then
+            commande=$oldcommande
+        elif test "$commande" = exit ; then
+            break
+        fi
+        _eval $commande
+        history -s "$commande"
+        oldcommande="$commande"
+    done
+}
+
+##############################################################################
+
+# Initialiser la machine (processeur et mémoire).
+init ()
+{
+    for i in $(seq 0 99)
+    do
+        memoire[$i]="   "
+    done
+    memoire[99]="I/O"
+
+    reset
+}
+
+##############################################################################
+
+# Réinitialiser le processeur.
+reset ()
+{
+    cycle=0
+    registres[R]=
+    registres[A]=
+    registres[B]=
+    registres[PC]=00
+    registres[IR]=
+    INSTRUCTION=
+
+    sortie=""
+
+    traces=""
+
+    ready=true
+    
+    $view && show   
+}
+
+##############################################################################
+
+# Charger la mémoire.
+# args: [DEBUT] [FICHIER]
+# Remplit la mémoire à partir de DEBUT avec les nombres lus dans FICHIER.
+# Si DEBUT est absent le chargement commence à l'adresse 0.
+# Si FICHIER est absent la lecture est faite sur l'entrée standard.
+#
+# Le fichier doit contenir une suite de nombre exprimés sur 3 chiffres
+# décimaux. Les nombres peuvent être séparés par des espaces, tabulations ou
+# saut de lignes.
+#
+# Dans ce fichier tout ce qui est compris entre un caractère # et la fin de la
+# ligne est ignoré (# y compris).
+load ()
+{
+    i=0
+    _isnum "$1" && { i=$1 && shift ; }
+    data=$(sed -e s/#.*$// $1 | tr -d "\n \t")
+    while test $i -le 99 && read -n3 n
+    do
+        memoire[$i]=$n
+        i=$((i + 1))
+    done <<< "$data"
+
+    $view && show
+}
+
+##############################################################################
+
+# Afficher le contenu de la mémoire.
+# args: [DEBUT [FIN]]
+# Affiche le contenu de la mémoire entre la case DEBUT et la case FIN.
+# Si DEBUT est absent toute la mémoire est affiché.
+# Si FIN est absent la mémoire est affiché entre la case DEBUT et la case 99.
+dump ()
+{
+    debut=0
+    fin=99
+    test "$1" && debut=$1
+    test "$2" && fin=$2
+    for i in $(seq $debut $fin)
+    do
+        printf "%3s" ${memoire[$i]}
+    done
+    printf "\n"
+}
+
+##############################################################################
+
+# Fixer la valeur de registres.
+# args: REGISTRE=VALEUR...
+setr ()
+{
+    for arg in "$@"
+    do
+        IFS="=" read r v <<< "$arg"
+        registres[$r]=$v
+        $view && show
+    done
+}
+
+##############################################################################
+
+# Fixer la valeur de cases mémoire.
+# args: ADDRESSE=VALEUR...
+setm ()
+{
+    for arg in "$@"
+    do
+        IFS="=" read a v <<< "$arg"
+        memoire[$a]=$v
+        $view && show
+    done
+}
+
+##############################################################################
+
+# Récupérer la prochaine commande (mets à jour IR et PC).
+fetch ()
+{
+    $ready || return
+    test ${registres[PC]} = 99 && return
+    registres[IR]=${memoire[${registres[PC]}]}
+    registres[PC]=$((registres[PC] + 1))
+    $view && show
+}
+
+##############################################################################
+
+# Décoder l'instruction dans IR.
+decode ()
+{
+    $ready || return
+    op=$(echo ${registres[IR]} | cut -c 1)
+    adr=$(echo ${registres[IR]} | cut -c 2,3 | sed 's/^0*//')
+    x=$(echo ${registres[IR]} | cut -c 2)
+    y=$(echo ${registres[IR]} | cut -c 3)
+    case $op in
+        0) INSTRUCTION="STO $adr" ;;
+        1) INSTRUCTION="LDA $adr" ;;
+        2) INSTRUCTION="LDB $adr" ;;
+        3) reg=(R A B)
+           INSTRUCTION="MOV ${reg[$x]} ${reg[$y]}"
+           ;;
+        4) case $x$y in
+               00) INSTRUCTION="ADD" ;;
+               01) INSTRUCTION="SUB" ;;
+               *) INSTRUCTION="ILL $op$x$y" ;;
+           esac
+           ;;
+        5) INSTRUCTION="JMP $adr" ;;
+        6) INSTRUCTION="JPP $adr" ;;
+        7) INSTRUCTION="JEQ $adr" ;;
+        8) INSTRUCTION="JNE $adr" ;;
+        *) INSTRUCTION="ILL $op$x$y" ;;
+    esac
+    $view && show
+}
+
+##############################################################################
+
+# Exécuter l'instruction dans IR.
+execute ()
+{
+    $ready || return
+    _$INSTRUCTION
+    traces="$traces$cycle\t$INSTRUCTION\n"
+    $view && show
+}
+
+##############################################################################
+
+# Exécuter un cycle complet (fetch/decode/execute).
+next ()
+{
+    $ready || return
+    cycle=$(expr $cycle + 1)
+    fetch
+    decode
+    execute
+}
+
+##############################################################################
+
+# Fait fonctionner la machine jusqu'à son arrêt.
+run ()
+{
+    $ready || return
+    while test ${registres[PC]} -ne 99
+    do
+        next
+        test $pause -gt 0 && sleep $pause
+    done
+}
+
+##############################################################################
+
+_ILL ()
+{
+    _warn "Instruction illégale : $@"
+    registres[PC]=99
+}
+
+_STO ()
+{
+    if test "x$1" = x99 ; then
+        sortie=${registres[R]}
+        $ansi && _ansi "\e[25;1H\e[K\t"
+        printf "Sortie : $sortie\n"
+    else
+        memoire[$1]=${registres[R]}
+    fi
+}
+
+_LDA ()
+{
+    if test "x$1" = x99 ; then
+        $ansi && _ansi "\e[27;1H\e[K\t"
+        _read -p "Entrée : " -N3 registres[A]
+    else
+        registres[A]=${memoire[$1]}
+    fi
+}
+
+_LDB ()
+{
+    if test "x$1" = x99 ; then
+        $ansi && _ansi "\e[27;1H\e[K\t"
+        _read -p "Entrée : " -N3 registres[B]
+    else
+        registres[B]=${memoire[$1]}
+    fi
+}
+
+_MOV ()
+{
+    registres[$2]=${registres[$1]}
+}
+
+_ADD ()
+{
+    registres[R]=$(expr ${registres[A]} + ${registres[B]})
+}
+
+_SUB ()
+{
+    registres[R]=$(expr ${registres[A]} - ${registres[B]})
+}
+
+_JMP ()
+{
+    registres[PC]=$1
+}
+
+_JPP ()
+{
+    test ${registres[R]} -gt 0 && registres[PC]=$1
+}
+
+_JEQ ()
+{
+    test ${registres[R]} -eq $1 && registres[PC]=$((${registres[PC]} + 2))
+}
+
+_JNE ()
+{
+    test ${registres[R]} -ne 0 && registres[PC]=$((${registres[PC]} + 2))
+}
+
+##############################################################################
+
+declare -A registres
+commandes=$(declare -F | cut -d ' ' -f 3 | grep -v -E '^_' | sort)
+ready=false
+
+if test $# -eq 0 ; then         # mode interactif
+    config debug=false view=true ansi=true pause=1
+    $ansi && _ansi "\e[2J\e[;H"
+    repl
+else                            # mode batch
+    test "$1" = "-h" -o "$1" = "--help" && help && exit
+    config debug=false view=false ansi=false pause=0
+    $ansi && _ansi "\e[2J\e[;H"
+    for arg in "$@"
+    do
+        _eval $arg
+    done
+fi
+
+##############################################################################
+
+exit 0
+
+# J'inclus à partir d'ici d'autres fichiers utilisé par le script. L'inclusion
+# est gérée par shembed (https://github.com/b3/util-shembed) et utilisé via la
+# fonction _file dans le script.
+
+# begin m99.md
+# Machine M99
+
+La machine M99 manipule des nombres exprimés sur 3 chiffres décimaux.
+
+Elle a une mémoire de 100 cases adressées de 00 à 99.
+
+La case 99 est utilisée pour les entrées/sorties :
+
+- lire le contenu de la case 99 équivaut à saisir un nombre de 3 chiffres sur
+  le terminal (clavier),
+- écrire dans la case 99 affiche le contenu sur le terminal (écran).
+
+## Microprocesseur
+
+Il y a 4 registres :
+
+- `A`, `B`, et `IR` contiennent des nombres exprimés sur 3 chiffres décimaux ;
+- `PC` contient des nombres exprimés sur 2 chiffres décimaux maximum ;
+- `R` contient des nombres signés exprimés sur 3 chiffres décimaux.
+
+## Unité de commande
+
+Au démarrage de la machine l'unité de commande met 00 dans `PC`.
+
+Elle répète le cycle Fetch/Decode/Execute tant que `PC` ne contient pas 99 :
+
+1. **fetch**
+    - copie le contenu de la case adressée par `PC` dans `IR`,
+    - incrémente la valeur de `PC` ;
+2. **decode** identifie l'instruction dans `IR` ;
+3. **execute**  éxecute l'instruction.
+
+## Unité Arithmétique et Logique
+
+L'unité arithmétique et logique effectue les calculs via les registres `A`,
+`B` et `R`.
+
+| code  | mnémonique | instruction                       |
+|-------|------------|-----------------------------------|
+| 0 x y | STO xy     | mem(xy) := `R`                    |
+| 1 x y | LDA xy     | `A` := mem(xy)                    |
+| 2 x y | LDB xy     | `B` := mem(xy)                    |
+| 3 x y | MOV x y    | y := x avec 0=`R`, 1=`A` et 2=`B` |
+| 4 0 0 | ADD        | `R` := `A`+`B`                    |
+| 4 0 1 | SUB        | `R` := `A`-`B`                    |
+| 5 x y | JMP xy     | `PC` := xy                        |
+| 6 x y | JPP xy     | si `R`>0 alors `PC` := xy         |
+| 7 x y | JEQ xy     | si `R`=xy alors `PC` := `PC` + 2  |
+| 8 x y | JNE xy     | si `R`!=xy alors `PC` := `PC` + 2 |
+
+# end m99.md
