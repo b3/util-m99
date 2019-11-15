@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Un moteur pour la machine M99
 #
 # usage: m99 [ACTION...]
@@ -86,6 +86,7 @@ _file () { sed -nr '/^# begin '"$1"' *$/,/^# end '"$1"'$/ p' "$0" | sed '1d ; $d
 # En absence de paramètres les valeurs courantes sont affichés.
 config ()
 {
+    _dbg "call $0" "$@"
     if test $# -eq 0 ; then
         $ansi && _ansi "\e[2J\e[;H"
         echo debug=$debug
@@ -123,7 +124,7 @@ config ()
 help ()
 {
     $ansi && _ansi "\e[2J\e[;H"
-    tabs 12
+    tabs -12
     if test -z "$1" ; then
         sed -n '2,/^$/ { s/^ *#// ; s/^ //g ; t e ; d ; :e p }' <$0 ;
         printf 'Les actions disponibles sont :\n\n'
@@ -157,7 +158,8 @@ doc ()
 # Afficher l'état de la machine.
 show ()
 {
-    tabs 4
+    _dbg "call $0" "$@"
+    tabs -4
     $ansi && _ansi "\e[2J\e[;H"
 
     printf "Mémoire\n\n"
@@ -181,14 +183,14 @@ show ()
 
     printf "\nProcesseur\t(t=$cycle)\n\n"
 
-    printf "\tPC\t%s\n" ${registres[PC]}
-    printf "\tIR\t%s" ${registres[IR]}
-    $ansi && test "$(echo $INSTRUCTION | cut -c -3)" = ILL && _ansi "\e[1;31m"
-    printf "\t\t%s\n" "$INSTRUCTION"
+    printf "\tPC\t%s\n" $registrePC
+    printf "\tIR\t%s" $registreIR
+    $ansi && test "$(echo $Instruction | cut -c -3)" = ILL && _ansi "\e[1;31m"
+    printf "\t\t%s\n" "$Instruction"
     $ansi && _ansi "\e[0m"
-    printf "\tR\t%s\n" ${registres[R]}
-    printf "\tA\t%s\n" ${registres[A]}
-    printf "\tB\t%s\n" ${registres[B]}
+    printf "\tR\t%s\n" $registreR
+    printf "\tA\t%s\n" $registreA
+    printf "\tB\t%s\n" $registreB
 
     printf "\nTerminal\n\n"
     printf "\tSortie : $sortie\n\n"
@@ -212,6 +214,7 @@ strace ()
 # Si la lecture est impossible ou si donne le mot exit la boucle est terminée.
 repl ()
 {
+    _dbg "call $0" "$@"
     while _read -p "> " commande
     do
         if test -z "$commande" ; then
@@ -230,15 +233,16 @@ repl ()
 # Initialiser la machine (processeur et mémoire).
 init ()
 {
+    _dbg "call $0" "$@"
     memoire[99]="I/O"
 
     cycle=0
-    registres[R]=
-    registres[A]=
-    registres[B]=
-    registres[PC]=00
-    registres[IR]=
-    INSTRUCTION=
+    registreR=
+    registreA=
+    registreB=
+    registrePC=00
+    registreIR=
+    Instruction=
 
     sortie=""
 
@@ -265,6 +269,7 @@ init ()
 # ligne est ignoré (# y compris).
 load ()
 {
+    _dbg "call $0" "$@"
     i=0
     _isnum "$1" && { i=$1 && shift ; }
     data=$(sed -e s/#.*$// $1 | tr -d "\n \t")
@@ -286,6 +291,7 @@ load ()
 # Si FIN est absent la mémoire est affiché entre la case DEBUT et la case 99.
 dump ()
 {
+    _dbg "call $0" "$@"
     debut=0
     fin=99
     test "$1" && debut=$1
@@ -303,10 +309,11 @@ dump ()
 # args: REGISTRE=VALEUR...
 setr ()
 {
+    _dbg "call $0" "$@"
     for arg in "$@"
     do
         IFS="=" read r v <<< "$arg"
-        registres[$r]=$v
+        eval reg$r=$v
         $view && show
     done
 }
@@ -317,6 +324,7 @@ setr ()
 # args: ADDRESSE=VALEUR...
 setm ()
 {
+    _dbg "call $0" "$@"
     for arg in "$@"
     do
         IFS="=" read a v <<< "$arg"
@@ -330,10 +338,11 @@ setm ()
 # Récupérer la prochaine commande (mets à jour IR et PC).
 fetch ()
 {
+    _dbg "call $0" "$@"
     $ready || return
-    test ${registres[PC]} = 99 && return
-    registres[IR]=${memoire[${registres[PC]}]}
-    registres[PC]=$((registres[PC] + 1))
+    test $registrePC = 99 && return
+    registreIR=${memoire[$registrePC]}
+    registrePC=$((registrePC + 1))
     $view && show
 }
 
@@ -342,29 +351,30 @@ fetch ()
 # Décoder l'instruction dans IR.
 decode ()
 {
+    _dbg "call $0" "$@"
     $ready || return
-    op=$(echo ${registres[IR]} | cut -c 1)
-    adr=$(echo ${registres[IR]} | cut -c 2,3 | sed 's/^0*//')
-    x=$(echo ${registres[IR]} | cut -c 2)
-    y=$(echo ${registres[IR]} | cut -c 3)
+    op=$(echo $registreIR | cut -c 1)
+    adr=$(echo $registreIR | cut -c 2,3 | sed 's/^0*//')
+    x=$(echo $registreIR | cut -c 2)
+    y=$(echo $registreIR | cut -c 3)
     case $op in
-        0) INSTRUCTION="STO $adr" ;;
-        1) INSTRUCTION="LDA $adr" ;;
-        2) INSTRUCTION="LDB $adr" ;;
+        0) Instruction="STO $adr" ;;
+        1) Instruction="LDA $adr" ;;
+        2) Instruction="LDB $adr" ;;
         3) reg=(R A B)
-           INSTRUCTION="MOV ${reg[$x]} ${reg[$y]}"
+           Instruction="MOV ${reg[$x]} ${reg[$y]}"
            ;;
         4) case $x$y in
-               00) INSTRUCTION="ADD" ;;
-               01) INSTRUCTION="SUB" ;;
-               *) INSTRUCTION="ILL $op$x$y" ;;
+               00) Instruction="ADD" ;;
+               01) Instruction="SUB" ;;
+               *) Instruction="ILL $op$x$y" ;;
            esac
            ;;
-        5) INSTRUCTION="JMP $adr" ;;
-        6) INSTRUCTION="JPP $adr" ;;
-        7) INSTRUCTION="JEQ $adr" ;;
-        8) INSTRUCTION="JNE $adr" ;;
-        *) INSTRUCTION="ILL $op$x$y" ;;
+        5) Instruction="JMP $adr" ;;
+        6) Instruction="JPP $adr" ;;
+        7) Instruction="JEQ $adr" ;;
+        8) Instruction="JNE $adr" ;;
+        *) Instruction="ILL $op$x$y" ;;
     esac
     $view && show
 }
@@ -374,9 +384,10 @@ decode ()
 # Exécuter l'instruction dans IR.
 execute ()
 {
+    _dbg "call $0" "$@"
     $ready || return
-    _$INSTRUCTION
-    traces="$traces$cycle\t$INSTRUCTION\n"
+    _$Instruction
+    traces="$traces$cycle\t$Instruction\n"
     $view && show
 }
 
@@ -385,6 +396,7 @@ execute ()
 # Exécuter un cycle complet (fetch/decode/execute).
 next ()
 {
+    _dbg "call $0" "$@"
     $ready || return
     cycle=$(expr $cycle + 1)
     fetch
@@ -397,8 +409,9 @@ next ()
 # Fait fonctionner la machine jusqu'à son arrêt.
 run ()
 {
+    _dbg "call $0" "$@"
     $ready || return
-    while test ${registres[PC]} -ne 99
+    while test $registrePC -ne 99
     do
         next
         test $pause -gt 0 && sleep $pause
@@ -409,79 +422,92 @@ run ()
 
 _ILL ()
 {
+    _dbg "call $0" "$@"
     _warn "Instruction illégale : $@"
-    registres[PC]=99
+    registrePC=99
 }
 
 _STO ()
 {
+    _dbg "call $0" "$@"
     if test "x$1" = x99 ; then
-        sortie=${registres[R]}
+        sortie=$registreR
         $ansi && _ansi "\e[25;1H\e[K\t"
         printf "Sortie : $sortie\n"
     else
-        memoire[$1]=${registres[R]}
+        memoire[$1]=$registreR
     fi
 }
 
 _LDA ()
 {
+    _dbg "call $0" "$@"
     if test "x$1" = x99 ; then
         $ansi && _ansi "\e[27;1H\e[K\t"
-        _read -p "Entrée : " -N3 registres[A]
+        _read -p "Entrée : " -N3 registreA
     else
-        registres[A]=${memoire[$1]}
+        registreA=${memoire[$1]}
     fi
 }
 
 _LDB ()
 {
+    _dbg "call $0" "$@"
     if test "x$1" = x99 ; then
         $ansi && _ansi "\e[27;1H\e[K\t"
-        _read -p "Entrée : " -N3 registres[B]
+        _read -p "Entrée : " -N3 registreB
     else
-        registres[B]=${memoire[$1]}
+        registreB=${memoire[$1]}
     fi
 }
 
 _MOV ()
 {
-    registres[$2]=${registres[$1]}
+    _dbg "call $0" "$@"
+    reg=(R A B)
+    set -x
+    eval reg$reg[$2]=\$reg$reg[$1]
+    set +x
 }
 
 _ADD ()
 {
-    registres[R]=$(expr ${registres[A]} + ${registres[B]})
+    _dbg "call $0" "$@"
+    registreR=$(expr $registreA + $registreB)
 }
 
 _SUB ()
 {
-    registres[R]=$(expr ${registres[A]} - ${registres[B]})
+    _dbg "call $0" "$@"
+    registreR=$(expr $registreA - $registreB)
 }
 
 _JMP ()
 {
-    registres[PC]=$1
+    _dbg "call $0" "$@"
+    registrePC=$1
 }
 
 _JPP ()
 {
-    test ${registres[R]} -gt 0 && registres[PC]=$1
+    _dbg "call $0" "$@"
+    test $registreR -gt 0 && registrePC=$1
 }
 
 _JEQ ()
 {
-    test ${registres[R]} -eq $1 && registres[PC]=$((${registres[PC]} + 2))
+    _dbg "call $0" "$@"
+    test $registreR -eq $1 && registrePC=$(expr $registrePC + 2)
 }
 
 _JNE ()
 {
-    test ${registres[R]} -ne $1 && registres[PC]=$((${registres[PC]} + 2))
+    _dbg "call $0" "$@"
+    test $registreR -ne $1 && registrePC=$(expr $registrePC + 2)
 }
 
 ##############################################################################
 
-declare -A registres
 commandes=$(declare -F | cut -d ' ' -f 3 | grep -v -E '^_' | sort)
 ansi=false
 ready=false
