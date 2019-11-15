@@ -49,6 +49,12 @@ EOF
 
 ##############################################################################
 
+# FreeBSD & GNU sed n'utilise pas les mêmes options pour les ERE
+ere=$({ sed v </dev/null >/dev/null 2>&1 && echo " -r" ; } || echo " -E")
+_sed () { sed $ere "$@" ; }
+
+##############################################################################
+
 _warn () { w="${0##*/}: attention: $*" ; echo $w 1>&2 ; $ansi && lastw="$lastw$w\n" ; }
 _dbg () { $debug && echo "${0##*/}: debug: $*" 1>&2 ; }
 _isnum () { test "$1" && test "$1" -eq "$1" 2>/dev/null ; }
@@ -56,7 +62,7 @@ _read () { read -e "$@" ; }
 
 _eval () { grep -q "$1" <<< "$commandes exit" && "$@" ; }
 _ansi () { printf "$*" ; }
-_file () { sed -nr '/^# begin '"$1"' *$/,/^# end '"$1"'$/ p' "$0" | sed '1d ; $d' ; }
+_file () { _sed -n '/^# begin '"$1"' *$/,/^# end '"$1"'$/ p' "$0" | _sed '1d ; $d' ; }
 
 # Essai de contournement de l'absence de complétion par readline dans read
 #
@@ -126,17 +132,17 @@ help ()
     $ansi && _ansi "\e[2J\e[;H"
     tabs -12
     if test -z "$1" ; then
-        sed -n '2,/^$/ { s/^ *#// ; s/^ //g ; t e ; d ; :e p }' <$0 ;
+        _sed -n '2,/^$/ { s/^ *#// ; s/^ //g ; t e ; d ; :e p }' <$0 ;
         printf 'Les actions disponibles sont :\n\n'
         for cmd in $commandes
         do
-            <$0 sed -r -n \
+            <$0 _sed -n \
              -e '/^ *$/ h' \
              -e '/^ *# / { s/^ *# // ; H }' \
              -e '/^'"$cmd"' ()/ { g ; s/^\n/  '"$cmd\t"'/ ; s/\n.*// ; p ; q }'
         done            
     else
-        <$0 sed -r -n \
+        <$0 _sed -n \
          -e '/^ *$/ h' \
          -e '/^ *#/ { s/^ *# // ; s/(args:.*)$/\1\n/ ; H }' \
          -e '/^'"$1"' ()/ { g ; s/^\n/\n'"$1"' - / ; s/args:/\nusage: '"$1"'/ ; s/\n/\n  /g ; p ; q }'
@@ -272,7 +278,7 @@ load ()
     _dbg "call $0" "$@"
     i=0
     _isnum "$1" && { i=$1 && shift ; }
-    data=$(sed -e s/#.*$// $1 | tr -d "\n \t")
+    data=$(_sed 's/#.*$//' $1 | tr -d "\n \t")
     while test $i -le 99 && read -n3 n
     do
         memoire[$i]=$n
@@ -354,7 +360,7 @@ decode ()
     _dbg "call $0" "$@"
     $ready || return
     op=$(echo $registreIR | cut -c 1)
-    adr=$(echo $registreIR | cut -c 2,3 | sed 's/^0*//')
+    adr=$(echo $registreIR | cut -c 2,3 | _sed 's/^0*//')
     x=$(echo $registreIR | cut -c 2)
     y=$(echo $registreIR | cut -c 3)
     case $op in
