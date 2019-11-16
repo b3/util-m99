@@ -49,13 +49,13 @@ EOF
 
 ##############################################################################
 
-# FreeBSD & GNU sed n'utilise pas les mêmes options pour les ERE
-ere=$({ sed v </dev/null >/dev/null 2>&1 && echo " -r" ; } || echo " -E")
-_sed () { sed $ere "$@" ; }
+# Un sed POSIX pour être portable (au moins Linux, FreeBSD et MacOS X)
+gnu=$(sed v </dev/null >/dev/null 2>&1 && echo " --posix")
+_sed () { sed $gnu -E "$@" ; }
 
 ##############################################################################
 
-_warn () { w="${0##*/}: attention: $*" ; echo $w 1>&2 ; $ansi && lastw="$lastw$w\n" ; }
+_warn () { echo "${0##*/}: attention: $*" 1>&2 ; }
 _dbg () { $debug && echo "${0##*/}: debug: $*" 1>&2 ; }
 _isnum () { test "$1" && test "$1" -eq "$1" 2>/dev/null ; }
 _read () { read -e "$@" ; }
@@ -92,7 +92,7 @@ _file () { _sed -n '/^# begin '"$1"' *$/,/^# end '"$1"'$/ p' "$0" | _sed '1d ; $
 # En absence de paramètres les valeurs courantes sont affichés.
 config ()
 {
-    _dbg "call $0" "$@"
+    _dbg "call: $0" "$@"
     if test $# -eq 0 ; then
         $ansi && _ansi "\e[2J\e[;H"
         echo debug=$debug
@@ -131,21 +131,51 @@ help ()
 {
     $ansi && _ansi "\e[2J\e[;H"
     tabs -12
+    # En version POSIX sed ne reconnait pas les sequences C (genre \n), du coup
+    # j'utilise @ que je remplace ensuite en \n via tr.
     if test -z "$1" ; then
-        _sed -n '2,/^$/ { s/^ *#// ; s/^ //g ; t e ; d ; :e p }' <$0 ;
+        _sed -n '
+             2,/^$/ {
+                    s/^ *\#//
+                    s/^ //g
+                    t e
+                    d
+                    :e
+                    p
+                    }' $0
         printf 'Les actions disponibles sont :\n\n'
         for cmd in $commandes
         do
-            <$0 _sed -n \
-             -e '/^ *$/ h' \
-             -e '/^ *# / { s/^ *# // ; H }' \
-             -e '/^'"$cmd"' ()/ { g ; s/^\n/  '"$cmd\t"'/ ; s/\n.*// ; p ; q }'
+            _sed -n '
+                 /^ *$/ h
+                 /^ *# / {
+                         s/^ *# //
+                         H
+                         }
+                 /^'"$cmd"' ()/ {
+                                g
+                                s/^\n/  '"$cmd"'@/
+                                s/\n.*//
+                                p
+                                q
+                                }' $0 | tr '@' '\t'
         done            
     else
-        <$0 _sed -n \
-         -e '/^ *$/ h' \
-         -e '/^ *#/ { s/^ *# // ; s/(args:.*)$/\1\n/ ; H }' \
-         -e '/^'"$1"' ()/ { g ; s/^\n/\n'"$1"' - / ; s/args:/\nusage: '"$1"'/ ; s/\n/\n  /g ; p ; q }'
+        _sed -n '
+             /^ *$/ h
+             /^ *#/ {
+                    s/^ *# //
+                    s/(args:.*)$/\1@/
+                    H
+                    }
+             /^'"$1"' ()/ {
+                          g
+                          s/^\n/@'"$1"' - /
+                          s/args:/@usage: '"$1"'/
+                          s/(\n|@)/@  /g
+                          p
+                          q
+                          }' $0 | tr '@' '\n'
     fi
     echo
 }
@@ -164,7 +194,7 @@ doc ()
 # Afficher l'état de la machine.
 show ()
 {
-    _dbg "call $0" "$@"
+    _dbg "call: $0" "$@"
     tabs -4
     $ansi && _ansi "\e[2J\e[;H"
 
@@ -220,7 +250,7 @@ strace ()
 # Si la lecture est impossible ou si donne le mot exit la boucle est terminée.
 repl ()
 {
-    _dbg "call $0" "$@"
+    _dbg "call: $0" "$@"
     while _read -p "> " commande
     do
         if test -z "$commande" ; then
@@ -239,7 +269,7 @@ repl ()
 # Initialiser la machine (processeur et mémoire).
 init ()
 {
-    _dbg "call $0" "$@"
+    _dbg "call: $0" "$@"
     memoire[99]="I/O"
 
     cycle=0
@@ -275,7 +305,7 @@ init ()
 # ligne est ignoré (# y compris).
 load ()
 {
-    _dbg "call $0" "$@"
+    _dbg "call: $0" "$@"
     i=0
     _isnum "$1" && { i=$1 && shift ; }
     data=$(_sed 's/#.*$//' $1 | tr -d "\n \t")
@@ -297,7 +327,7 @@ load ()
 # Si FIN est absent la mémoire est affiché entre la case DEBUT et la case 99.
 dump ()
 {
-    _dbg "call $0" "$@"
+    _dbg "call: $0" "$@"
     debut=0
     fin=99
     test "$1" && debut=$1
@@ -315,7 +345,7 @@ dump ()
 # args: REGISTRE=VALEUR...
 setr ()
 {
-    _dbg "call $0" "$@"
+    _dbg "call: $0" "$@"
     for arg in "$@"
     do
         IFS="=" read r v <<< "$arg"
@@ -330,7 +360,7 @@ setr ()
 # args: ADDRESSE=VALEUR...
 setm ()
 {
-    _dbg "call $0" "$@"
+    _dbg "call: $0" "$@"
     for arg in "$@"
     do
         IFS="=" read a v <<< "$arg"
@@ -344,7 +374,7 @@ setm ()
 # Récupérer la prochaine commande (mets à jour IR et PC).
 fetch ()
 {
-    _dbg "call $0" "$@"
+    _dbg "call: $0" "$@"
     $ready || return
     test $registrePC = 99 && return
     registreIR=${memoire[$registrePC]}
@@ -357,7 +387,7 @@ fetch ()
 # Décoder l'instruction dans IR.
 decode ()
 {
-    _dbg "call $0" "$@"
+    _dbg "call: $0" "$@"
     $ready || return
     op=$(echo $registreIR | cut -c 1)
     adr=$(echo $registreIR | cut -c 2,3 | _sed 's/^0*//')
@@ -390,7 +420,7 @@ decode ()
 # Exécuter l'instruction dans IR.
 execute ()
 {
-    _dbg "call $0" "$@"
+    _dbg "call: $0" "$@"
     $ready || return
     _$Instruction
     traces="$traces$cycle\t$Instruction\n"
@@ -402,7 +432,7 @@ execute ()
 # Exécuter un cycle complet (fetch/decode/execute).
 next ()
 {
-    _dbg "call $0" "$@"
+    _dbg "call: $0" "$@"
     $ready || return
     cycle=$(expr $cycle + 1)
     fetch
@@ -415,7 +445,7 @@ next ()
 # Fait fonctionner la machine jusqu'à son arrêt.
 run ()
 {
-    _dbg "call $0" "$@"
+    _dbg "call: $0" "$@"
     $ready || return
     while test $registrePC -ne 99
     do
@@ -428,14 +458,14 @@ run ()
 
 _ILL ()
 {
-    _dbg "call $0" "$@"
+    _dbg "call: $0" "$@"
     _warn "Instruction illégale : $@"
     registrePC=99
 }
 
 _STO ()
 {
-    _dbg "call $0" "$@"
+    _dbg "call: $0" "$@"
     if test "x$1" = x99 ; then
         sortie=$registreR
         $ansi && _ansi "\e[25;1H\e[K\t"
@@ -447,7 +477,7 @@ _STO ()
 
 _LDA ()
 {
-    _dbg "call $0" "$@"
+    _dbg "call: $0" "$@"
     if test "x$1" = x99 ; then
         $ansi && _ansi "\e[27;1H\e[K\t"
         _read -p "Entrée : " -N3 registreA
@@ -458,7 +488,7 @@ _LDA ()
 
 _LDB ()
 {
-    _dbg "call $0" "$@"
+    _dbg "call: $0" "$@"
     if test "x$1" = x99 ; then
         $ansi && _ansi "\e[27;1H\e[K\t"
         _read -p "Entrée : " -N3 registreB
@@ -469,7 +499,7 @@ _LDB ()
 
 _MOV ()
 {
-    _dbg "call $0" "$@"
+    _dbg "call: $0" "$@"
     reg=(R A B)
     set -x
     eval reg$reg[$2]=\$reg$reg[$1]
@@ -478,37 +508,37 @@ _MOV ()
 
 _ADD ()
 {
-    _dbg "call $0" "$@"
+    _dbg "call: $0" "$@"
     registreR=$(expr $registreA + $registreB)
 }
 
 _SUB ()
 {
-    _dbg "call $0" "$@"
+    _dbg "call: $0" "$@"
     registreR=$(expr $registreA - $registreB)
 }
 
 _JMP ()
 {
-    _dbg "call $0" "$@"
+    _dbg "call: $0" "$@"
     registrePC=$1
 }
 
 _JPP ()
 {
-    _dbg "call $0" "$@"
+    _dbg "call: $0" "$@"
     test $registreR -gt 0 && registrePC=$1
 }
 
 _JEQ ()
 {
-    _dbg "call $0" "$@"
+    _dbg "call: $0" "$@"
     test $registreR -eq $1 && registrePC=$(expr $registrePC + 2)
 }
 
 _JNE ()
 {
-    _dbg "call $0" "$@"
+    _dbg "call: $0" "$@"
     test $registreR -ne $1 && registrePC=$(expr $registrePC + 2)
 }
 
