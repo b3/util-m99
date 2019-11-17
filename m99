@@ -435,7 +435,7 @@ decode ()
     x=$(echo $registreIR | cut -c 2)
     y=$(echo $registreIR | cut -c 3)
     case $op in
-        0) instruction="STO $adr" ;;
+        0) instruction="STR $adr" ;;
         1) instruction="LDA $adr" ;;
         2) instruction="LDB $adr" ;;
         3) reg=(R A B)
@@ -504,7 +504,7 @@ _ILL ()
     registrePC=99
 }
 
-_STO ()
+_STR ()
 {
     _dbg "call: $0" "$@"
     if test "x$1" = x99 ; then
@@ -667,7 +667,7 @@ L'unité arithmétique et logique effectue les calculs via les registres `A`,
 
 | code  | mnémonique | instruction                       |
 |-------|------------|-----------------------------------|
-| 0 x y | STO xy     | mem(xy) := `R`                    |
+| 0 x y | STR xy     | mem(xy) := `R`                    |
 | 1 x y | LDA xy     | `A` := mem(xy)                    |
 | 2 x y | LDB xy     | `B` := mem(xy)                    |
 | 3 x y | MOV x y    | y := x avec 0=`R`, 1=`A` et 2=`B` |
