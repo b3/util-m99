@@ -14,7 +14,7 @@
 # Afficher les crédits et autres aspects légaux.
 credits ()
 {
-    $ansi && _ansi "\e[2J\e[;H"
+    _ansi "\e[2J\e[;H"
     cat <<EOF
 
 La machine [M99], le processeur débranché, a été pensée et mise au point par
@@ -49,20 +49,38 @@ EOF
 
 ##############################################################################
 
+# J'essaie de rendre le script le plus portable possible :
+#
+# - pas de fonctionnalités de bash non disponible dans la version de MacOS X ;
+# - utilisation des options POSIX des outils Unix quand c'est possible 
+#   (https://pubs.opengroup.org/onlinepubs/9699919799/idx/xcu.html).
+#
+# Pour l'affichage en mode ANSI j'utilise les séquences de contrôle de
+# terminaux ANSI et affiche la machine dans un bloc de 44 sur 27 caractères
+# sur la partie haute et droite du terminal
+# (https://en.wikipedia.org/wiki/ANSI_escape_code#Terminal_output_sequences).
+
+##############################################################################
+
 # Un sed POSIX pour être portable (au moins Linux, FreeBSD et MacOS X)
 gnu=$(sed v </dev/null >/dev/null 2>&1 && echo " --posix")
 _sed () { sed $gnu -E "$@" ; }
 
 ##############################################################################
 
-_warn () { echo "${0##*/}: attention: $*" 1>&2 ; }
 _dbg () { $debug && echo "${0##*/}: debug: $*" 1>&2 ; }
+_warn () { echo "${0##*/}: attention: $*" 1>&2 ; }
 _isnum () { test "$1" && test "$1" -eq "$1" 2>/dev/null ; }
-_read () { read -e "$@" ; }
 
 _eval () { grep -q "$1" <<< "$commandes exit" && "$@" ; }
-_ansi () { printf "$*" ; }
 _file () { _sed -n '/^# begin '"$1"' *$/,/^# end '"$1"'$/ p' "$0" | _sed '1d ; $d' ; }
+_ansi () {
+    if $ansi && { test $COLUMNS -lt 124 || test $LINES -lt 27 ; } ; then
+        _warn "terminal trop petit, mode ansi désactivé"
+        ansi=false
+    fi
+    $ansi && printf "$*"
+}
 
 # Essai de contournement de l'absence de complétion par readline dans read
 #
@@ -89,12 +107,11 @@ _file () { _sed -n '/^# begin '"$1"' *$/,/^# end '"$1"'$/ p' "$0" | _sed '1d ; $
 # En mode batch tous les paramètres sont à false. Les valeurs par défaut en
 # mode interactif sont suffixées par *.
 #
-# En absence de paramètres les valeurs courantes sont affichés.
+# En absence de paramètres les valeurs courantes sont affichées.
 config ()
 {
     _dbg "call: $0" "$@"
     if test $# -eq 0 ; then
-        $ansi && _ansi "\e[2J\e[;H"
         echo debug=$debug
         echo view=$view
         echo ansi=$ansi
@@ -129,7 +146,6 @@ config ()
 # args: [commande]
 help ()
 {
-    $ansi && _ansi "\e[2J\e[;H"
     tabs -12
     # En version POSIX sed ne reconnait pas les sequences C (genre \n), du coup
     # j'utilise @ que je remplace ensuite en \n via tr.
@@ -185,7 +201,6 @@ help ()
 # Afficher la documentation de la machine M99.
 doc ()
 {
-    $ansi && _ansi "\e[2J\e[;H"
     _file m99.md
 }
 
@@ -195,12 +210,17 @@ doc ()
 show ()
 {
     _dbg "call: $0" "$@"
+    
+    _printf () { _ansi "\e[80C\e[K" ; printf "$@" ; }
+
     tabs -4
-    $ansi && _ansi "\e[2J\e[;H"
+    _ansi "\e[s\e[1;1H"
 
-    printf "Mémoire\n\n"
+    _printf "Mémoire\n"
 
-    printf "\t"
+    _printf "\n"
+
+    _printf "\t"
     for x in $(seq 0 10 90)
     do
         printf "$x\t"
@@ -209,7 +229,7 @@ show ()
 
     for y in $(seq 0 9)
     do
-        printf "$y\t"
+        _printf "$y\t"
         for x in $(seq 0 10 90)
         do
             printf "%s\t" ${memoire[$((x + y))]}
@@ -217,21 +237,29 @@ show ()
         printf "\n"
     done
 
-    printf "\nProcesseur\t(t=$cycle)\n\n"
+    _printf "\n"
 
-    printf "\tPC\t%s\n" $registrePC
-    printf "\tIR\t%s" $registreIR
-    $ansi && test "$(echo $Instruction | cut -c -3)" = ILL && _ansi "\e[1;31m"
-    printf "\t\t%s\n" "$Instruction"
-    $ansi && _ansi "\e[0m"
-    printf "\tR\t%s\n" $registreR
-    printf "\tA\t%s\n" $registreA
-    printf "\tB\t%s\n" $registreB
+    _printf "Processeur\t(t=$cycle)\n"
 
-    printf "\nTerminal\n\n"
-    printf "\tSortie : $sortie\n\n"
+    _printf "\n"
 
-    $ansi && test "$lastw" && printf "$lastw\n" && lastw=
+    _printf "\tPC\t%s\n" $registrePC
+    _printf "\tIR\t%s" $registreIR
+    $ansi && test "$(echo $instruction | cut -c -3)" = ILL && _ansi "\e[1;31m"
+    printf "\t\t%s\n" "$instruction"
+    _ansi "\e[0m"
+    _printf "\tR\t%s\n" $registreR
+    _printf "\tA\t%s\n" $registreA
+    _printf "\tB\t%s\n" $registreB
+
+    _printf "\n"
+    _printf "Terminal\n"
+    _printf "\n"
+    _printf "\tSortie : $sortie\n"
+    _printf "\n"
+    _printf "\n"
+
+    _ansi "\e[u"
 }
 
 ##############################################################################
@@ -239,7 +267,6 @@ show ()
 # Afficher les instructions exécutées.
 strace ()
 {
-    $ansi && _ansi "\e[2J\e[;H"
     printf "$traces"
 }
 
@@ -247,11 +274,13 @@ strace ()
 
 # Demander les actions à effectuer en boucle.
 # Une action vide équivaut à la dernière action demandée.
-# Si la lecture est impossible ou si donne le mot exit la boucle est terminée.
+# Si la lecture est impossible ou donne le mot exit la boucle est terminée.
 repl ()
 {
     _dbg "call: $0" "$@"
-    while _read -p "> " commande
+    $inrepl && _warn "déjà en mode interactif" && return
+    inrepl=true
+    while read -e -p "> " commande
     do
         if test -z "$commande" ; then
             commande=$oldcommande
@@ -259,6 +288,7 @@ repl ()
             break
         fi
         _eval $commande
+        $ansi && $view && show
         history -s "$commande"
         oldcommande="$commande"
     done
@@ -278,7 +308,7 @@ init ()
     registreB=
     registrePC=00
     registreIR=
-    Instruction=
+    instruction=
 
     sortie=""
 
@@ -297,7 +327,7 @@ init ()
 # Si DEBUT est absent le chargement commence à l'adresse 0.
 # Si FICHIER est absent la lecture est faite sur l'entrée standard.
 #
-# Le fichier doit contenir une suite de nombre exprimés sur 3 chiffres
+# Le fichier doit contenir une suite de nombres exprimés sur 3 chiffres
 # décimaux. Les nombres peuvent être séparés par des espaces, tabulations ou
 # saut de lignes.
 #
@@ -394,23 +424,23 @@ decode ()
     x=$(echo $registreIR | cut -c 2)
     y=$(echo $registreIR | cut -c 3)
     case $op in
-        0) Instruction="STO $adr" ;;
-        1) Instruction="LDA $adr" ;;
-        2) Instruction="LDB $adr" ;;
+        0) instruction="STO $adr" ;;
+        1) instruction="LDA $adr" ;;
+        2) instruction="LDB $adr" ;;
         3) reg=(R A B)
-           Instruction="MOV ${reg[$x]} ${reg[$y]}"
+           instruction="MOV ${reg[$x]} ${reg[$y]}"
            ;;
         4) case $x$y in
-               00) Instruction="ADD" ;;
-               01) Instruction="SUB" ;;
-               *) Instruction="ILL $op$x$y" ;;
+               00) instruction="ADD" ;;
+               01) instruction="SUB" ;;
+               *) instruction="ILL $op$x$y" ;;
            esac
            ;;
-        5) Instruction="JMP $adr" ;;
-        6) Instruction="JPP $adr" ;;
-        7) Instruction="JEQ $adr" ;;
-        8) Instruction="JNE $adr" ;;
-        *) Instruction="ILL $op$x$y" ;;
+        5) instruction="JMP $adr" ;;
+        6) instruction="JPP $adr" ;;
+        7) instruction="JEQ $adr" ;;
+        8) instruction="JNE $adr" ;;
+        *) instruction="ILL $op$x$y" ;;
     esac
     $view && show
 }
@@ -422,8 +452,8 @@ execute ()
 {
     _dbg "call: $0" "$@"
     $ready || return
-    _$Instruction
-    traces="$traces$cycle\t$Instruction\n"
+    _$instruction
+    traces="$traces$cycle\t$instruction\n"
     $view && show
 }
 
@@ -459,7 +489,7 @@ run ()
 _ILL ()
 {
     _dbg "call: $0" "$@"
-    _warn "Instruction illégale : $@"
+    _warn "instruction illégale : $@"
     registrePC=99
 }
 
@@ -468,8 +498,9 @@ _STO ()
     _dbg "call: $0" "$@"
     if test "x$1" = x99 ; then
         sortie=$registreR
-        $ansi && _ansi "\e[25;1H\e[K\t"
+        _ansi "\e[s\e[25;H\e[80C\e[K\t"
         printf "Sortie : $sortie\n"
+        _ansi "\e[u"
     else
         memoire[$1]=$registreR
     fi
@@ -479,8 +510,9 @@ _LDA ()
 {
     _dbg "call: $0" "$@"
     if test "x$1" = x99 ; then
-        $ansi && _ansi "\e[27;1H\e[K\t"
-        _read -p "Entrée : " -N3 registreA
+        _ansi "\e[s\e[26;H\e[80C\e[K\t"
+        read -e -p "Entrée : " -n3 registreA
+        _ansi "\e[u"
     else
         registreA=${memoire[$1]}
     fi
@@ -490,8 +522,9 @@ _LDB ()
 {
     _dbg "call: $0" "$@"
     if test "x$1" = x99 ; then
-        $ansi && _ansi "\e[27;1H\e[K\t"
-        _read -p "Entrée : " -N3 registreB
+        _ansi "\e[s\e[26;H\e[80C\e[K\t"
+        read -e -p "Entrée : " -n3 registreB
+        _ansi "\e[u"
     else
         registreB=${memoire[$1]}
     fi
@@ -501,14 +534,13 @@ _MOV ()
 {
     _dbg "call: $0" "$@"
     reg=(R A B)
-    set -x
-    eval reg$reg[$2]=\$reg$reg[$1]
-    set +x
+    eval registre$reg[$2]=\$registre$reg[$1]
 }
 
 _ADD ()
 {
     _dbg "call: $0" "$@"
+    # pas de $(()) pour éviter l'interprétation en octal
     registreR=$(expr $registreA + $registreB)
 }
 
@@ -545,17 +577,22 @@ _JNE ()
 ##############################################################################
 
 commandes=$(declare -F | cut -d ' ' -f 3 | grep -v -E '^_' | sort)
+debug=false
+view=false
 ansi=false
+pause=0
 ready=false
+inrepl=false
+
+init
 
 if test $# -eq 0 ; then         # mode interactif
     config debug=false view=true ansi=true pause=1
-    $ansi && _ansi "\e[2J\e[;H"
+    _ansi "\e[2J\e[;H"
+    $view && $_ansi && show
     repl
 else                            # mode batch
-    test "$1" = "-h" -o "$1" = "--help" && help && exit
-    config debug=false view=false ansi=false pause=0
-    $ansi && _ansi "\e[2J\e[;H"
+    test "$1" = "-h" -o "$1" = "--help" && help && exit 0
     for arg in "$@"
     do
         _eval $arg
