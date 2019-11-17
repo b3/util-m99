@@ -453,7 +453,7 @@ execute ()
     _dbg "call: $0" "$@"
     $ready || return
     _$instruction
-    traces="$traces$cycle\t$instruction\n"
+    traces="$traces$cycle:\t$instruction\n"
     $view && show
 }
 
