@@ -1,12 +1,19 @@
 #!/usr/bin/env bash
 # Un moteur pour la machine M99
 #
-# usage: m99 [ACTION...]
+# usage: m99 [OPTIONS] [ACTION|FICHIER]...
 #
 # Sans paramètre le moteur est démarré en mode interactif.
 #
+# Si le paramètre est un fichier il est chargé en mémoire et la machine est
+# démarrée et fonctionne jusqu'à une instruction d'arrêt.
+#
 # La documentation de chaque action est accessible en passant son nom à la
-# commande help. doc affiche le fonctionnement de la machine M99.
+# commande help ou à l'option -h ou --help.
+#
+# OPTIONS
+#
+#   -h, --help [ACTION]  affiche ce message d'aide ou l'aide de ACTION.
 #
 
 ##############################################################################
@@ -163,7 +170,7 @@ help ()
                     :e
                     p
                     }' $0
-        printf 'Les actions disponibles sont :\n\n'
+        printf 'ACTIONS\n\n'
         for cmd in $commandes
         do
             _sed -n '
@@ -593,13 +600,22 @@ init
 if test $# -eq 0 ; then         # mode interactif
     config debug=false view=true ansi=true pause=1
     _ansi "\e[2J\e[;H"
-    $view && $_ansi && show
+    $view && $ansi && show
     repl
 else                            # mode batch
-    test "$1" = "-h" -o "$1" = "--help" && help && exit 0
+    if test "$1" = "-h" || test "$1" = "--help" ; then
+        shift
+        help "$2"
+        exit 0
+    fi
     for arg in "$@"
     do
-        _eval $arg
+        if test -r "$arg" ; then
+            load "$arg"
+            run
+        else
+            _eval $arg
+        fi
     done
 fi
 
