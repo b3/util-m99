@@ -545,7 +545,7 @@ _MOV ()
 {
     _dbg "call: $0" "$@"
     reg=(R A B)
-    eval registre$reg[$2]=\$registre$reg[$1]
+    eval registre$2=\$registre$1
 }
 
 _ADD ()
