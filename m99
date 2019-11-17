@@ -75,9 +75,13 @@ _isnum () { test "$1" && test "$1" -eq "$1" 2>/dev/null ; }
 _eval () { grep -q "$1" <<< "$commandes exit" && "$@" ; }
 _file () { _sed -n '/^# begin '"$1"' *$/,/^# end '"$1"'$/ p' "$0" | _sed '1d ; $d' ; }
 _ansi () {
-    if $ansi && { test $COLUMNS -lt 124 || test $LINES -lt 27 ; } ; then
-        _warn "terminal trop petit, mode ansi désactivé"
-        ansi=false
+    if $ansi ; then
+        cols=$(stty size | cut -d ' ' -f 2)
+        ligs=$(stty size | cut -d ' ' -f 1)
+        if test $cols -lt 124 || test $ligs -lt 27 ; then
+            _warn "terminal trop petit, mode ansi désactivé"
+            ansi=false
+        fi
     fi
     $ansi && printf "$*"
 }
