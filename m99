@@ -429,7 +429,7 @@ decode ()
     _dbg "call: $0" "$@"
     $ready || return
     op=$(echo $registreIR | cut -c 1)
-    adr=$(echo $registreIR | cut -c 2,3 | _sed 's/^0*//')
+    adr=$(echo $registreIR | cut -c 2,3 | _sed 's/^0([1-9])/\1/')
     x=$(echo $registreIR | cut -c 2)
     y=$(echo $registreIR | cut -c 3)
     case $op in
