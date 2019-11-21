@@ -663,17 +663,17 @@ Elle répète le cycle fetch-decode-execute tant que `PC` ne contient pas 99 :
 L'unité arithmétique et logique effectue les calculs via les registres `A`,
 `B` et `R`.
 
-| code  | mnémonique | instruction                       |
-|-------|------------|-----------------------------------|
-| 0 x y | STR xy     | mem(xy) := `R`                    |
-| 1 x y | LDA xy     | `A` := mem(xy)                    |
-| 2 x y | LDB xy     | `B` := mem(xy)                    |
-| 3 x y | MOV x y    | y := x avec 0=`R`, 1=`A` et 2=`B` |
-| 4 0 0 | ADD        | `R` := `A`+`B`                    |
-| 4 0 1 | SUB        | `R` := `A`-`B`                    |
-| 5 x y | JMP xy     | `PC` := xy                        |
-| 6 x y | JPP xy     | si `R`>0 alors `PC` := xy         |
-| 7 x y | JEQ xy     | si `R`=xy alors `PC` := `PC` + 2  |
-| 8 x y | JNE xy     | si `R`!=xy alors `PC` := `PC` + 2 |
+| code  | mnémonique | instruction                         |
+|-------|------------|-------------------------------------|
+| 0 x y | STR xy     | mem(xy) := `R`                      |
+| 1 x y | LDA xy     | `A` := mem(xy)                      |
+| 2 x y | LDB xy     | `B` := mem(xy)                      |
+| 3 x y | MOV x y    | y := x avec 0=`R`, 1=`A` et 2=`B`   |
+| 4 0 0 | ADD        | `R` := `A`+`B`                      |
+| 4 0 1 | SUB        | `R` := `A`-`B`                      |
+| 5 x y | JMP xy     | `PC` := xy                          |
+| 6 x y | JPP xy     | si `R` > 0 alors `PC` := xy         |
+| 7 x y | JEQ xy     | si `R` == xy alors `PC` := `PC` + 2 |
+| 8 x y | JNE xy     | si `R` != xy alors `PC` := `PC` + 2 |
 
 # end m99.md
