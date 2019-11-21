@@ -3,7 +3,8 @@
 #
 # usage: m99 [OPTIONS] [ACTION|FICHIER]...
 #
-# Sans paramètre le moteur est démarré en mode interactif.
+# Sans paramètre le moteur est démarré en mode interactif (qui se quitte en
+# utilisant la commande exit).
 #
 # Si le paramètre est un fichier il est chargé en mémoire et la machine est
 # démarrée et fonctionne jusqu'à une instruction d'arrêt.
