@@ -139,13 +139,7 @@ config ()
                 ;;
             view) view=$v ;;
             ansi) ansi=$v ;;
-            pause)
-                if _isnum $v ; then
-                    pause=$v
-                else
-                    _warn "pas un entier: $arg"
-                fi
-                ;;
+            pause) pause=$v ;;
             *) _warn "paramètre inconnu non pris en compte: $arg" ;;
         esac
     done
