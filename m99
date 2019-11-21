@@ -603,7 +603,7 @@ if test $# -eq 0 ; then         # mode interactif
 else                            # mode batch
     if test "$1" = "-h" || test "$1" = "--help" ; then
         shift
-        help "$2"
+        help "$1"
         exit 0
     fi
     for arg in "$@"
