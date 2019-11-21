@@ -93,6 +93,9 @@ _ansi () {
     $ansi && printf "$*"
 }
 
+_adr () { printf "%.2d\n" $(_sed 's/^0*//' <<< $1) ; }
+_mot () { printf "%.3d\n" $(_sed 's/^0*//' <<< $1) ; }
+
 # Essai de contournement de l'absence de complétion par readline dans read
 #
 # set -o emacs;
@@ -272,6 +275,7 @@ show ()
 # Afficher les instructions exécutées.
 strace ()
 {
+    tabs -8
     printf "$traces"
 }
 
@@ -317,7 +321,7 @@ init ()
 
     sortie=""
 
-    traces=""
+    traces="t\tmem\tcode\tinstruction\n"
 
     ready=true
     
@@ -369,9 +373,8 @@ dump ()
     test "$2" && fin=$2
     for i in $(seq $debut $fin)
     do
-        printf "%3s" ${memoire[$i]}
+        printf "%3s\n" ${memoire[$i]}
     done
-    printf "\n"
 }
 
 ##############################################################################
@@ -411,8 +414,9 @@ fetch ()
 {
     _dbg "call: $0" "$@"
     $ready || return
-    test $registrePC = 99 && return
+    test $registrePC = 99 && ready=false && return
     registreIR=${memoire[$registrePC]}
+    traces="$traces$cycle\t$(_adr $registrePC)"
     registrePC=$((registrePC + 1))
     $view && show
 }
@@ -458,7 +462,7 @@ execute ()
     _dbg "call: $0" "$@"
     $ready || return
     _$instruction
-    traces="$traces$cycle:\t$instruction\n"
+    traces="$traces\t$registreIR\t$instruction\n"
     $view && show
 }
 
@@ -482,10 +486,10 @@ run ()
 {
     _dbg "call: $0" "$@"
     $ready || return
-    while test $registrePC -ne 99
+    while $ready
     do
         next
-        test $pause -gt 0 && sleep $pause
+        test "$pause" && sleep $pause
     done
 }
 
