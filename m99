@@ -387,7 +387,7 @@ setr ()
     for arg in "$@"
     do
         IFS="=" read r v <<< "$arg"
-        eval reg$r=$v
+        eval registre$r=$v
         $view && show
     done
 }
