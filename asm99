@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# Un compilateur pour la machine m99
+#
+# usage: asm99 [OPTIONS]
+#
+# Le programme est lu sur l'entrée standard, la version codée (suite de mots
+# de 3 chiffres) est écrit sur la sortie standard.
+#
+# OPTIONS
+#
+#   -h, --help affiche ce message d'aide.
+#
+
+# Un sed POSIX pour être portable (au moins Linux, FreeBSD et MacOS X)
+gnu=$(sed v </dev/null >/dev/null 2>&1 && echo " --posix")
+_sed () { sed $gnu -E "$@" ; }
+_die () { echo "${0##*/}: erreur: $*" 1>&2 ; exit 1; }
+
+# Afficher la documentation du script ou d'une de ses commandes.
+# args: [commande]
+help ()
+{
+    _sed -n '
+         2,/^$/ {
+                s/^ *\#//
+                s/^ //g
+                t e
+                d
+                :e
+                p
+                }' $0
+}
+
+regcode ()
+{
+    case $1 in
+        R) echo 0;;
+        A) echo 1;;
+        B) echo 2;;
+        *) _die "registre inexistant: $1" ;;
+    esac
+}
+
+adresse ()
+{
+    printf "%.2d\n" $(_sed 's/^0*//' <<< $1)
+}
+
+mot ()
+{
+    printf "%.3d\n" $(_sed 's/^0*//' <<< $1)
+}
+
+code ()
+{
+    while read op ad rg
+    do
+        case $op in
+            STR) echo 0$(adresse $ad) ;;
+            LDA) echo 1$(adresse $ad) ;;
+            LDB) echo 2$(adresse $ad) ;;
+            MOV) echo 3$(regcode $ad)$(regcode $rg) ;;
+            ADD) echo 400 ;;
+            SUB) echo 401 ;;
+            JMP) echo 5$(adresse $ad) ;;
+            HLT) echo 599 ;;
+            JPP) echo 6$(adresse $ad) ;;
+            JEQ) echo 7$(adresse $ad) ;;
+            JNE) echo 8$(adresse $ad) ;;
+            *)
+                if test -z "$ad" ; then
+                    echo $(mot $op)
+                else
+                    _die "ligne illégale: $op $ad $rg"
+                fi
+            ;;
+        esac
+    done
+}
+
+{ test "$1" = "-h" || test "$1" = "--help" ; } && help && exit 0
+
+_sed -e 's/#.*$//' -e 's!//.*!!' |
+    tr "\t" " " |
+    tr -s " " |
+    tr [:lower:] [:upper:] |
+    code

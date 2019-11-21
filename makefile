@@ -7,6 +7,12 @@ pdf: check
 	./m99 doc > m99.md
 	pandoc -s -t latex -V lang=fr -V fontfamily=fourier -V fontsize=10pt -V papersize=a4 -V geometry=margin=1.5cm -V pagestyle=empty -V urlcolor=blue m99.md -o m99.pdf
 
+%.m99: %.asm
+	./asm99 < $< > $@
+
+## Compile les programmes d'exemples
+build: $(addsuffix .m99,$(basename $(wildcard */*.asm)))
+
 ## Vérifie la disponibilité des outils de conversion
 check:
 	@which pandoc
@@ -18,5 +24,5 @@ clean:
 
 ## Supprime tout ce qui peut être reconstruit
 full-clean: clean
-	-rm m99.md m99.pdf
+	-rm m99.md m99.pdf $(addsuffix .m99,$(basename $(wildcard */*.asm)))
 
