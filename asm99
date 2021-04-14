@@ -3,8 +3,11 @@
 #
 # usage: asm99 [OPTIONS]
 #
-# Le programme est lu sur l'entrée standard, la version codée (suite de mots
-# de 3 chiffres) est écrit sur la sortie standard.
+# Le programme est lu sur l'entrée standard, la version codée (suite
+# de mots de 3 chiffres) est écrit sur la sortie standard.
+#
+# Des commentaires peuvent être introduits par `#`, `;` ou `//`. Les
+# lignes vides ne sont pas prises en compte.
 #
 # OPTIONS
 #
@@ -80,8 +83,9 @@ code ()
 
 { test "$1" = "-h" || test "$1" = "--help" ; } && help && exit 0
 
-_sed -e '/^ *#/d' -e 's/#.*$//' -e '\!^ *//!d' -e 's!//.*$!!' |
+_sed -e 's/#.*$//' -e 's!;.*$!!' -e 's!//.*$!!' |
     tr "\t" " " |
     tr -s " " |
     tr [:lower:] [:upper:] |
+	sed '/^ *$/d' |
     code

@@ -341,14 +341,14 @@ init ()
 # décimaux. Les nombres peuvent être séparés par des espaces, tabulations ou
 # saut de lignes.
 #
-# Dans ce fichier tout ce qui est compris entre un caractère # (ou les
-# caractères //) et la fin de la ligne est ignoré (# y compris).
+# Dans ce fichier tout ce qui est compris entre un caractère `#`, `;`
+# ou `//` et la fin de la ligne est ignoré (# y compris).
 load ()
 {
     _dbg "call: $0" "$@"
     i=0
     _isnum "$1" && { i=$1 && shift ; }
-    data=$(_sed -e 's/#.*$//' -e 's!//.*!!' $1 | tr -d "\n \t")
+    data=$(_sed -e 's/#.*$//' -e 's/;.*$//' -e 's!//.*$!!' $1 | tr -d "\n \t")
     while test $i -le 99 && read -n3 n
     do
         memoire[$i]=$n
