@@ -80,7 +80,7 @@ code ()
 
 { test "$1" = "-h" || test "$1" = "--help" ; } && help && exit 0
 
-_sed -e 's/#.*$//' -e 's!//.*!!' |
+_sed -e '/^ *#/d' -e 's/#.*$//' -e '\!^ *//!d' -e 's!//.*$!!' |
     tr "\t" " " |
     tr -s " " |
     tr [:lower:] [:upper:] |
