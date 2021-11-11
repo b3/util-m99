@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# Un "désassembleur" pour la machine m99
+#
+# usage: msa99 [OPTIONS]
+#
+# Les codes machines sont lus sur l'entrée standard (un code par ligne
+# ou tous les codes en séquence séparé ou non par des espaces ou
+# tabulations).
+#
+# La version décodée (suite de mnémonique assembleur) est écrite sur
+# la sortie standard.
+#
+# OPTIONS
+#
+#   -c, --comment  commente le code
+#   -h, --help     affiche ce message d'aide.
+#
+
+# Un sed POSIX pour être portable (au moins Linux, FreeBSD et MacOS X)
+gnu=$(sed v </dev/null >/dev/null 2>&1 && echo " --posix")
+_sed () { sed $gnu -E "$@" ; }
+_die () { echo "${0##*/}: erreur: $*" 1>&2 ; exit 1; }
+
+# Afficher la documentation du script ou d'une de ses commandes.
+# args: [commande]
+help ()
+{
+    _sed -n '
+         2,/^$/ {
+                s/^ *\#//
+                s/^ //g
+                t e
+                d
+                :e
+                p
+                }' $0
+}
+
+_echo ()
+{
+    printf "%-7.7s" "$1"
+    $comment && printf "   // $2"
+    printf "\n"
+}
+
+code2reg ()
+{
+    case $1 in
+        0) echo R;;
+        1) echo A;;
+        2) echo B;;
+        *) _die "registre inexistant: $1" ;;
+    esac
+}
+
+decode ()
+{
+    while read code x y
+    do
+        case $code in
+            0) _echo "STR $x$y" "Stocke le contenu de R dans la case $x$y" ;;
+            1) _echo "LDA $x$y" "Charge le contenu de la case $x$y dans A" ;;
+            2) _echo "LDB $x$y" "Charge le contenu de la case $x$y dans B" ;;
+            3)
+                s=$(code2reg $x)
+                d=$(code2reg $y)
+                _echo "MOV $s $d" "Copie le contenu de $s dans $d"
+                ;;
+            4)
+                case "$x$y" in
+                    "00") _echo "ADD" "Place dans R le résultat de A + B" ;;
+                    "01") _echo "SUB" "Place dans R le résultat de A - B" ;;
+                    *) _die "code illégal: $code$x$y" ;;
+                esac
+                ;;
+            5) _echo "JMP $x$y" "Place l'adresse $x$y dans PC" ;;
+            6) _echo "JPP $x$y" "Place l'adresse $x$y dans PC si R > 0" ;;
+            7) _echo "JEQ $x$y" "Incrémente PC de 2 si R == $x$y" ;;
+            8) _echo "JEQ $x$y" "Incrémente PC de 2 si R != $x$y" ;;
+            *) _die "code illégal: $code$x$y" ;;
+        esac
+    done
+}
+
+{ test "$1" = "-h" || test "$1" = "--help" ; } && help && exit 0
+
+comment=false
+{ test "$1" = "-c" || test "$1" = "--comment" ; } && comment=true
+
+tr -d ' \t\n'|
+    sed -re 's/(.)(.)(.)/\1 \2 \3\n/g' |
+    decode
