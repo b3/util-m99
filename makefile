@@ -23,6 +23,6 @@ clean:
 	-rm *~
 
 ## Supprime tout ce qui peut être reconstruit
-full-clean: clean
+reset: clean
 	-rm m99.md m99.pdf $(addsuffix .m99,$(basename $(wildcard */*.asm)))
 
