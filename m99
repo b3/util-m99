@@ -77,6 +77,7 @@ _sed () { sed $gnu -E "$@" ; }
 ##############################################################################
 
 _dbg () { $debug && echo "${0##*/}: debug: $*" 1>&2 ; }
+_dbgc () { _dbg "call ${FUNCNAME[1]}: $*"; }
 _warn () { echo "${0##*/}: attention: $*" 1>&2 ; }
 _isnum () { test "$1" && test "$1" -eq "$1" 2>/dev/null ; }
 
@@ -125,7 +126,7 @@ _mot () { printf "%.3d\n" $(_sed 's/^0*//' <<< $1) ; }
 # En absence de paramètres les valeurs courantes sont affichées.
 config ()
 {
-    _dbg "call: $0" "$@"
+    _dbgc "$@"
     if test $# -eq 0 ; then
         echo debug=$debug
         echo view=$view
@@ -218,7 +219,7 @@ doc ()
 # Afficher l'état de la machine.
 show ()
 {
-    _dbg "call: $0" "$@"
+    _dbgc "$@"
     
     _printf () { _ansi "\e[80C\e[K" ; printf "$@" ; }
 
@@ -287,7 +288,7 @@ strace ()
 # Si la lecture est impossible ou donne le mot exit la boucle est terminée.
 repl ()
 {
-    _dbg "call: $0" "$@"
+    _dbgc "$@"
     $inrepl && _warn "déjà en mode interactif" && return
     inrepl=true
     while read -e -p "> " commande
@@ -309,7 +310,7 @@ repl ()
 # Initialiser la machine (processeur et mémoire).
 init ()
 {
-    _dbg "call: $0" "$@"
+    _dbgc "$@"
     memoire[99]="I/O"
 
     cycle=0
@@ -345,7 +346,7 @@ init ()
 # ou `//` et la fin de la ligne est ignoré (# y compris).
 load ()
 {
-    _dbg "call: $0" "$@"
+    _dbgc "$@"
     i=0
     _isnum "$1" && { i=$1 && shift ; }
     data=$(_sed -e 's/#.*$//' -e 's/;.*$//' -e 's!//.*$!!' $1 | tr -d "\n \t")
@@ -367,7 +368,7 @@ load ()
 # Si FIN est absent la mémoire est affiché entre la case DEBUT et la case 99.
 dump ()
 {
-    _dbg "call: $0" "$@"
+    _dbgc "$@"
     debut=0
     fin=99
     test "$1" && debut=$1
@@ -384,7 +385,7 @@ dump ()
 # args: REGISTRE=VALEUR...
 setr ()
 {
-    _dbg "call: $0" "$@"
+    _dbgc "$@"
     for arg in "$@"
     do
         IFS="=" read r v <<< "$arg"
@@ -399,7 +400,7 @@ setr ()
 # args: ADDRESSE=VALEUR...
 setm ()
 {
-    _dbg "call: $0" "$@"
+    _dbgc "$@"
     for arg in "$@"
     do
         IFS="=" read a v <<< "$arg"
@@ -413,7 +414,7 @@ setm ()
 # Récupérer la prochaine commande (mets à jour IR et PC).
 fetch ()
 {
-    _dbg "call: $0" "$@"
+    _dbgc "$@"
     $ready || return
     test $registrePC = 99 && ready=false && return
     registreIR=${memoire[$registrePC]}
@@ -427,7 +428,7 @@ fetch ()
 # Décoder l'instruction dans IR.
 decode ()
 {
-    _dbg "call: $0" "$@"
+    _dbgc "$@"
     $ready || return
     op=$(echo $registreIR | cut -c 1)
     adr=$(echo $registreIR | cut -c 2,3 | _sed 's/^0([1-9])/\1/')
@@ -460,7 +461,7 @@ decode ()
 # Exécuter l'instruction dans IR.
 execute ()
 {
-    _dbg "call: $0" "$@"
+    _dbgc "$@"
     $ready || return
     _$instruction
     traces="$traces\t$registreIR\t$instruction\n"
@@ -472,7 +473,7 @@ execute ()
 # Exécuter un cycle complet (fetch/decode/execute).
 next ()
 {
-    _dbg "call: $0" "$@"
+    _dbgc "$@"
     $ready || return
     cycle=$(expr $cycle + 1)
     fetch
@@ -485,7 +486,7 @@ next ()
 # Fait fonctionner la machine jusqu'à son arrêt.
 run ()
 {
-    _dbg "call: $0" "$@"
+    _dbgc "$@"
     $ready || return
     while $ready
     do
@@ -498,14 +499,14 @@ run ()
 
 _ILL ()
 {
-    _dbg "call: $0" "$@"
+    _dbgc "$@"
     _warn "instruction illégale : $@"
     registrePC=99
 }
 
 _STR ()
 {
-    _dbg "call: $0" "$@"
+    _dbgc "$@"
     if test "x$1" = x99 ; then
         sortie=$registreR
         _ansi "\e[s\e[25;H\e[80C\e[K\t"
@@ -518,7 +519,7 @@ _STR ()
 
 _LDA ()
 {
-    _dbg "call: $0" "$@"
+    _dbgc "$@"
     if test "x$1" = x99 ; then
         _ansi "\e[s\e[26;H\e[80C\e[K\t"
         read -e -p "Entrée : " -n3 registreA
@@ -530,7 +531,7 @@ _LDA ()
 
 _LDB ()
 {
-    _dbg "call: $0" "$@"
+    _dbgc "$@"
     if test "x$1" = x99 ; then
         _ansi "\e[s\e[26;H\e[80C\e[K\t"
         read -e -p "Entrée : " -n3 registreB
@@ -542,45 +543,45 @@ _LDB ()
 
 _MOV ()
 {
-    _dbg "call: $0" "$@"
+    _dbgc "$@"
     reg=(R A B)
     eval registre$2=\$registre$1
 }
 
 _ADD ()
 {
-    _dbg "call: $0" "$@"
+    _dbgc "$@"
     # pas de $(()) pour éviter l'interprétation en octal
     registreR=$(expr $registreA + $registreB)
 }
 
 _SUB ()
 {
-    _dbg "call: $0" "$@"
+    _dbgc "$@"
     registreR=$(expr $registreA - $registreB)
 }
 
 _JMP ()
 {
-    _dbg "call: $0" "$@"
+    _dbgc "$@"
     registrePC=$1
 }
 
 _JPP ()
 {
-    _dbg "call: $0" "$@"
+    _dbgc "$@"
     test $registreR -gt 0 && registrePC=$1
 }
 
 _JEQ ()
 {
-    _dbg "call: $0" "$@"
+    _dbgc "$@"
     test $registreR -eq $1 && registrePC=$(expr $registrePC + 2)
 }
 
 _JNE ()
 {
-    _dbg "call: $0" "$@"
+    _dbgc "$@"
     test $registreR -ne $1 && registrePC=$(expr $registrePC + 2)
 }
 
