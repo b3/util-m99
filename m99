@@ -82,6 +82,7 @@ _warn () { echo "${0##*/}: attention: $*" 1>&2 ; }
 _isnum () { test "$1" && test "$1" -eq "$1" 2>/dev/null ; }
 
 _eval () { grep -q "$1" <<< "$commandes exit" && "$@" ; }
+_doc () { { test "x$2" = "x-h" || test "x$2" = "x--help" ; } && help "$1" ; }
 _file () { _sed -n '/^# begin '"$1"' *$/,/^# end '"$1"'$/ p' "$0" | _sed '1d ; $d' ; }
 _ansi () {
     if $ansi ; then
@@ -298,8 +299,11 @@ repl ()
         elif test "$commande" = exit ; then
             break
         fi
-        _eval $commande
-        $ansi && $view && show
+
+        _doc $commande || {
+            _eval $commande
+            $ansi && $view && show
+        }
         history -s "$commande"
         oldcommande="$commande"
     done
