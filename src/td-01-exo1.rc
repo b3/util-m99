@@ -1,0 +1,4 @@
+#config debug=true
+load src/td-01-exo1-00.m99
+load 13 src/td-01-exo1-13.m99
+load 40 src/td-01-exo1-40.m99
