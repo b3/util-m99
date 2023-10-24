@@ -15,8 +15,19 @@
 # OPTIONS
 #
 #   -h, --help [ACTION]  affiche ce message d'aide ou l'aide de ACTION.
+#   -r, --run FILE       utilise FILE comme fichier d'initialisation
 #
-
+# Au démarrage toutes les actions présentes dans le fichier
+# d'initialisation sont exécutées. Un seul fichier d'initialisation
+# est considéré par ordre de priorité décroissante :
+#
+# 1. dernier fichier spécifié par l'option `-r`
+# 2. $PWD/.m99rc
+# 3. $HOME/.m99rc
+#
+# Le fichier d'initialisation peut contenir n'importe quelle commande
+# bash. Les actions offertes par m99 sont des fonctions bash.
+#
 ##############################################################################
 
 # Afficher les crédits et autres aspects légaux.
@@ -79,6 +90,8 @@ _sed () { sed $gnu -E "$@" ; }
 _dbg () { $debug && echo "${0##*/}: debug: $*" 1>&2 ; }
 _dbgc () { _dbg "call ${FUNCNAME[1]}: $*"; }
 _warn () { echo "${0##*/}: attention: $*" 1>&2 ; }
+_die () { echo "${0##*/}: erreur: $*" 1>&2 ; exit 1 ; }
+_opt () { test "$(echo x$1 | cut -c 2)" = "-" ; }
 _isnum () { test "$1" && test "$1" -eq "$1" 2>/dev/null ; }
 
 _eval () { grep -q "$1" <<< "$commandes exit" && "$@" ; }
@@ -98,6 +111,20 @@ _ansi () {
 
 _adr () { printf "%.2d\n" $(_sed 's/^0*//' <<< $1) ; }
 _mot () { printf "%.3d\n" $(_sed 's/^0*//' <<< $1) ; }
+
+_rc () {
+    _dbgc "$@"
+    if ! test -z "$1" && test -r "$1" ; then
+        rcfile="$1"
+    elif test -r "$PWD/.m99rc" ; then
+        rcfile="$PWD/.m99rc"
+    elif test -r "$HOME/.m99rc" ; then
+        rcfile="$HOME/.m99rc"
+    fi
+    if ! test -z "$rcfile" ; then
+        source "$rcfile"
+    fi
+}
 
 # Essai de contournement de l'absence de complétion par readline dans read
 #
@@ -284,12 +311,17 @@ strace ()
 
 ##############################################################################
 
-# Demander les actions à effectuer en boucle.
-# Une action vide équivaut à la dernière action demandée.
+# Boucle de lecture/évaluation/affichage
+# Lire les actions à effectuer en boucle dans l'entrée standard.
+#
+# Une action (ligne) vide équivaut à la répétition de la dernière
+# action demandée.
+#
 # Si la lecture est impossible ou donne le mot exit la boucle est terminée.
 repl ()
 {
     _dbgc "$@"
+    # appel de repl dans repl interdit
     $inrepl && _warn "déjà en mode interactif" && return
     inrepl=true
     while read -e -p "> " commande
@@ -307,6 +339,7 @@ repl ()
         history -s "$commande"
         oldcommande="$commande"
     done
+    inrepl=false
 }
 
 ##############################################################################
@@ -599,19 +632,36 @@ pause=0
 ready=false
 inrepl=false
 
+# prise en compte options
+while _opt "$1"
+do
+    case "$1" in
+        "-h"|"--help")
+            shift
+            help "$1"
+            exit 0
+            ;;
+        "-r"|"--rc")
+            shift
+            test -z "$1" && _die "fichier non spécifié"
+            test -r "$1" || _die "$1: fichier inacessible"
+            rcfile="$1"
+            ;;
+    esac
+    shift
+done
+
 init
 
+# travail effectif
 if test $# -eq 0 ; then         # mode interactif
     config debug=false view=true ansi=true pause=1
     _ansi "\e[2J\e[;H"
+    _rc "$rcfile"
     $view && $ansi && show
     repl
 else                            # mode batch
-    if test "$1" = "-h" || test "$1" = "--help" ; then
-        shift
-        help "$1"
-        exit 0
-    fi
+    _rc "$rcfile"
     for arg in "$@"
     do
         if test -r "$arg" ; then
